@@ -11,6 +11,7 @@ namespace MiNET.Mobiles
     {
         public virtual int EntityId { get; set; }
         public virtual int Type { get; set; }
+        public virtual byte Flag { get;  set; }
         public virtual Position3D Position { get; set; }
         public virtual float BodyYaw { get; set; }
         public virtual Level _level { get; set; }
@@ -27,6 +28,11 @@ namespace MiNET.Mobiles
         {
             Position = position;
             _level.AddMobile(this);
+        }
+
+        public virtual int GetEntityId(Mobile mobile)
+        {
+            return EntityId;
         }
 
         //Other mobile stuff...

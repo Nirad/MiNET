@@ -13,6 +13,7 @@ namespace MiNET.Mobiles
 
         public Sheep(Level level) : base(level)
         {
+            Flag = 0x00;
         }
 
    
