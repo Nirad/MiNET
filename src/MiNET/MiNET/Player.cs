@@ -262,13 +262,15 @@ namespace MiNET
             }
             else if (text == ".movetest")
             {
-                    var pak = new McpeMoveEntity();
+                    var pak = new McpeMovePlayer();
                     pak.entityId = 13;
                     pak.x = KnownPosition.X +1;
                     pak.y = KnownPosition.Y;
                     pak.z = KnownPosition.Z +1;
                     pak.yaw = 0;
                     pak.pitch = 0;
+                    pak.bodyYaw = 0;
+                    pak.teleport = 1;
                     SendPackage((Package)pak);
             }
             else

@@ -1416,41 +1416,6 @@ namespace MiNET.Net
 		partial void AfterDecode();
 
 	}
-
-    public partial class McpeMoveEntity : Package
-    {
-        public int entityId;
-        public float x;
-        public float y;
-        public float z;
-        public float yaw;
-        public float pitch;
-
-        public McpeMoveEntity()
-        {
-            Id = 149;
-        }
-
-        protected override void EncodePackage()
-        {
-            base.EncodePackage();
-
-            BeforeEncode();
-
-            Write(entityId);
-            Write(x);
-            Write(y);
-            Write(z);
-            Write(yaw);
-            Write(pitch);
-
-            AfterEncode();
-        }
-
-        partial void BeforeEncode();
-        partial void AfterEncode();
-
-    }
     
 	public partial class McpePlaceBlock : Package
 	{
