@@ -8,6 +8,7 @@ using Craft.Net.Logic.Windows;
 using MiNET.Net;
 using MiNET.Utils;
 using MiNET.Worlds;
+using MiNET.Mobiles;
 
 namespace MiNET
 {
@@ -43,7 +44,7 @@ namespace MiNET
 		public MetadataSlot ItemInHand { get; private set; }
 
 		public DateTime LastUpdatedTime { get; private set; }
-		public PlayerPosition3D KnownPosition { get; private set; }
+		public Position3D KnownPosition { get; private set; }
 		public bool IsSpawned { get; private set; }
 		public string Username { get; private set; }
 
@@ -58,9 +59,9 @@ namespace MiNET
 			_chunksUsed = new Dictionary<string, ChunkColumn>();
 			_entities = new List<Player>();
 			Inventory = new InventoryWindow();
-			AddEntity(this); // Make sure we are entity with ID == 0;
+			AddEntity(this); // Make sure we are entity with ID == 0; //Why?
 			IsSpawned = false;
-			KnownPosition = new PlayerPosition3D
+			KnownPosition = new Position3D
 			{
 				X = _level.SpawnPoint.X,
 				Y = _level.SpawnPoint.Y,
@@ -273,13 +274,18 @@ namespace MiNET
                     pak.teleport = 1;
                     SendPackage((Package)pak);
             }
+            else if (text == ".spawn")
+            {
+                var mob = new Sheep(_level);
+                mob.SpawnTo(KnownPosition);
+            }
             else
                 _level.BroadcastTextMessage(text);
 		}
 
 		private void HandleMovePlayer(McpeMovePlayer msg)
 		{
-			KnownPosition = new PlayerPosition3D(msg.x, msg.y, msg.z) {Pitch = msg.pitch, Yaw = msg.yaw, BodyYaw = msg.bodyYaw};
+			KnownPosition = new Position3D(msg.x, msg.y, msg.z) {Pitch = msg.pitch, Yaw = msg.yaw, BodyYaw = msg.bodyYaw};
 			LastUpdatedTime = DateTime.UtcNow;
 
 			if (Username == null) return;
@@ -518,6 +524,21 @@ namespace MiNET
 			SendArmorForPlayer(player);
 		}
 
+        public void SendAddForMobile(Mobile mobile)
+        {
+            SendPackage(new McpeAddMobileEntity
+            {
+                entityId = _level.Mobiles.Count + 200, //TODO make more eficient for player id add mob..
+                type = mobile.Type,
+                x = (int)mobile.Position.X,
+                y = (int)mobile.Position.Y,
+                z = (int)mobile.Position.Z,
+                yaw = (byte)mobile.Position.Yaw,
+                pitch = (byte)mobile.Position.Pitch
+                //metadata = new byte[0] TODO
+            });
+        }
+
 		private void SendEquipmentForPlayer(Player player)
 		{
 			SendPackage(new McpePlayerEquipment()
@@ -573,6 +594,22 @@ namespace MiNET
 
 			SendPackage(move);
 		}
+
+        public void SendMovementForMobile(Mobile mobile)
+        {
+            var move = _movePool.GetObject();
+            move.MovePool = _movePool;
+            move.entityId = mobile.EntityId;
+            move.x = mobile.Position.X;
+            move.y = mobile.Position.Y;
+            move.z = mobile.Position.Z;
+            move.yaw = mobile.Position.Yaw;
+            move.pitch = mobile.Position.Pitch;
+            move.bodyYaw = mobile.Position.BodyYaw;
+            move.teleport = 0;
+
+            SendPackage(move);
+        }
 
 		/// <summary>
 		///     Very important litle method. This does all the sending of packages for
