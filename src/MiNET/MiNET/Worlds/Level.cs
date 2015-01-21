@@ -11,6 +11,7 @@ using MiNET.Blocks;
 using MiNET.Items;
 using MiNET.Net;
 using Timer = System.Timers.Timer;
+using MiNET.Mobiles;
 
 namespace MiNET.Worlds
 {
@@ -57,6 +58,7 @@ namespace MiNET.Worlds
 
 		public Coordinates3D SpawnPoint { get; private set; }
 		public List<Player> Players { get; private set; } //TODO: Need to protect this, not threadsafe
+        public List<Mobile> Mobiles { get; private set; } //TODO: Need to protect this, not threadsafe
 		public string LevelId { get; private set; }
 
 		//const SURVIVAL = 0;
@@ -72,6 +74,7 @@ namespace MiNET.Worlds
 		{
 			SpawnPoint = new Coordinates3D(50, 10, 50);
 			Players = new List<Player>();
+            Mobiles = new List<Mobile>();
 			LevelId = levelId;
 			GameMode = GameMode.Creative;
 			_worldProvider = worldProvider;
@@ -134,6 +137,14 @@ namespace MiNET.Worlds
 				if (targetPlayer.IsSpawned)
 					player.SendAddForPlayer(targetPlayer);
 			}
+
+            foreach (Mobile mobile in Mobiles)
+            {
+                    //Add all mobile to client
+                    //TODO : find by distan and load near mob only...
+                    player.SendAddForMobile(mobile);
+            }
+
 			BroadcastTextMessage(string.Format("Player {0} joined the game!", player.Username), true);
 		}
 
@@ -148,6 +159,19 @@ namespace MiNET.Worlds
 
 			BroadcastTextMessage(string.Format("Player {0} left the game!", player.Username), true);
 		}
+
+        public void AddMobile(Mobile mobile)
+        {
+            lock (Mobiles) Mobiles.Add(mobile);
+
+            Player[] targetPlayers = GetPlayers();
+
+            foreach (var targetPlayer in targetPlayers)
+            {
+                if (targetPlayer.IsSpawned)
+                    targetPlayer.SendAddForMobile(mobile);
+            }
+        }
 
 		public void BroadcastTextMessage(string text, bool isSystemMessage = false)
 		{
@@ -211,6 +235,19 @@ namespace MiNET.Worlds
 							}
 						}
 					}, null);
+
+                    // Movement
+                    ThreadPool.UnsafeQueueUserWorkItem(delegate(object state)
+                    {
+                        foreach (Mobile mobile in Mobiles)
+                        {
+                            // Check if mobile has been updated since last world-tick
+                            if ((DateTime.UtcNow.Ticks - mobile.LastUpdatedTime.Ticks) <= _levelTicker.Interval * TimeSpan.TicksPerMillisecond)
+                            {
+                                BroadCastMovement(mobile, players);
+                            }
+                        }
+                    }, null);
 
 					// New players
 
@@ -285,6 +322,15 @@ namespace MiNET.Worlds
 				if (targetPlayer != null) targetPlayer.SendMovementForPlayer(player);
 			}
 		}
+
+        private void BroadCastMovement(Mobile mobile, Player[] players)
+        {
+            foreach (var targetPlayer in players)
+            {
+                //ThreadPool.QueueUserWorkItem(delegate { if (targetPlayer != null) targetPlayer.SendMovementForPlayer(player); });
+                if (targetPlayer != null) targetPlayer.SendMovementForMobile(mobile);
+            }
+        }
 
 		public IEnumerable<ChunkColumn> GenerateChunks(int playerX, int playerZ, Dictionary<string, ChunkColumn> chunksUsed)
 		{
