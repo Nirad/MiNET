@@ -1,6 +1,6 @@
 ﻿namespace MiNET
 {
-	public class PlayerPosition3D
+	public class Position3D
 	{
 		public float X { get; set; }
 		public float Y { get; set; }
@@ -10,11 +10,11 @@
 		public float Pitch { get; set; }
 		public float BodyYaw { get; set; }
 
-		public PlayerPosition3D()
+		public Position3D()
 		{
 		}
 
-		public PlayerPosition3D(float x, float y, float z)
+		public Position3D(float x, float y, float z)
 		{
 			X = x;
 			Y = y;
