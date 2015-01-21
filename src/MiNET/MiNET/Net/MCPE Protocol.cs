@@ -1000,6 +1000,7 @@ namespace MiNET.Net
         public int z;
         public byte yaw;
         public byte pitch;
+        public byte action;
 
         public McpeAddMobileEntity()
         {
@@ -1019,11 +1020,22 @@ namespace MiNET.Net
             Write(z);
             Write(yaw);
             Write(pitch);
+            //dic.WriteTo(this);
             //NOTE : Write((byte)((Type << 5) | (Index & 0x1F)));
-            Write((byte)((0 << 5) | (0 & 0x1F)));
-            Write((byte)0);
+            Write((byte)((0 << 5) | 0 & 0x1F));
+            Write((byte)action);//action
+            Write((byte)((1 << 5) | 1 & 0x1F));
+            Write((short)(0x01));//air
+            Write((byte)((4 << 5) | 2 & 0x1F));
+            Write((string)("Sheep"));//nametag
+            Write((byte)((0 << 5) | 3 & 0x1F));
+            Write((byte)(0x01));//show name tag
             Write((byte)((3 << 5) | (6 & 0x1F)));
-            Write((float)0);
+            Write((float)20);//healt
+            Write((byte)((0 << 5) | (16 & 0x1F)));
+            Write((byte)(4 & 0x0F));//sheep color
+            Write((byte)((0 << 5) | (15 & 0x1F)));
+            Write((byte)0x01);//no ai
             Write((byte)0x7F);
 
             AfterEncode();
@@ -1260,9 +1272,9 @@ namespace MiNET.Net
 
 	public partial class McpeEntityData : Package
 	{
-		public int x; // = null;
-		public byte y; // = null;
-		public int z; // = null;
+        public int entityId;
+        public byte slot;
+        public byte action;
 		public byte[] namedtag; // = null;
 
 		public McpeEntityData()
@@ -1276,10 +1288,9 @@ namespace MiNET.Net
 
 			BeforeEncode();
 
-			Write(x);
-			Write(y);
-			Write(z);
-			Write(namedtag);
+			Write(entityId);
+            Write((byte)((0 << 5) | slot & 0x1F));
+            Write((byte)(action));
 
 			AfterEncode();
 		}
@@ -1292,12 +1303,12 @@ namespace MiNET.Net
 			base.DecodePackage();
 
 			BeforeDecode();
-
+            /*
 			x = ReadInt();
 			y = ReadByte();
 			z = ReadInt();
 			namedtag = ReadBytes(0);
-
+            */
 			AfterDecode();
 		}
 
