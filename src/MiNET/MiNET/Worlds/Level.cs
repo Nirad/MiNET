@@ -418,12 +418,12 @@ namespace MiNET.Worlds
 			}
 		}
 
-		public void RelayBroadcast(Player target, McpeEntityEventPacket message)
+		public void RelayBroadcast(Mobile target, McpeEntityEventPacket message)
 		{
 			foreach (var player in GetPlayers())
 			{
 				var send = message.Clone<McpeEntityEventPacket>();
-				send.entityId = player.GetEntityId(target);
+				send.entityId = target.GetEntityId(target);
 				player.SendPackage(send);
 			}
 		}

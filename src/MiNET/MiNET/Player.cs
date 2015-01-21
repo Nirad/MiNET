@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Threading;
+using System.Linq;
 using Craft.Net.Common;
 using Craft.Net.Logic.Windows;
 using MiNET.Net;
@@ -22,12 +23,11 @@ namespace MiNET
 		PositiveX = 5
 	}
 
-	public class Player
+	public class Player : Mobile
 	{
 		private readonly MiNetServer _server;
 		private readonly IPEndPoint _endpoint;
 		private Dictionary<string, ChunkColumn> _chunksUsed;
-		private Level _level;
 		private short _mtuSize;
 		private List<Player> _entities;
 		private int _reliableMessageNumber;
@@ -50,16 +50,15 @@ namespace MiNET
 
 		public InventoryWindow Inventory { get; set; }
 
-		public Player(MiNetServer server, IPEndPoint endpoint, Level level, short mtuSize)
+		public Player(MiNetServer server, IPEndPoint endpoint, Level level, short mtuSize) : base(level)
 		{
 			_server = server;
 			_endpoint = endpoint;
-			_level = level;
 			_mtuSize = mtuSize;
 			_chunksUsed = new Dictionary<string, ChunkColumn>();
 			_entities = new List<Player>();
 			Inventory = new InventoryWindow();
-			AddEntity(this); // Make sure we are entity with ID == 0; //Why?
+            EntityId = _level.Players.Count;
 			IsSpawned = false;
 			KnownPosition = new Position3D
 			{
@@ -302,13 +301,22 @@ namespace MiNET
 
 		private void HandleInteract(McpeInteractPacket msg)
 		{
-			Player target = _entities[msg.targetEntityId];
+            Mobile target;
+            //We use id up to 200 for mobile TODO
+            if (msg.targetEntityId >= 200)
+            {
+                target = _level.Mobiles.Where(m => m.EntityId == msg.targetEntityId).FirstOrDefault();
+            }
+            else
+            {
+                target = _level.Players.Where(m => m.EntityId == msg.targetEntityId).FirstOrDefault();
+            }
 
 			if (target == null) return;
 
 			_level.RelayBroadcast(target, new McpeEntityEventPacket()
 			{
-				entityId = 0,
+				entityId = GetEntityId(target),
 				eventId = 2
 			});
 		}
@@ -320,7 +328,7 @@ namespace MiNET
 				_level.RelayBroadcast(this, new McpeAnimate()
 				{
 					actionId = 1,
-					entityId = 0
+					entityId = message.entityId
 				});
 
 				Debug.WriteLine("Use item: {0}", message.item);
@@ -467,7 +475,7 @@ namespace MiNET
 
 			SendPackage(new McpeAddPlayer
 			{
-				clientId = 0,
+				clientId = GetEntityId(player),
 				username = player.Username,
 				entityId = GetEntityId(player),
 				x = player.KnownPosition.X,
@@ -493,7 +501,8 @@ namespace MiNET
                 y = (int)mobile.Position.Y,
                 z = (int)mobile.Position.Z,
                 yaw = (byte)mobile.Position.Yaw,
-                pitch = (byte)mobile.Position.Pitch
+                pitch = (byte)mobile.Position.Pitch,
+                action = mobile.Flag
                 //metadata = new byte[0] TODO
             });
         }
@@ -621,37 +630,6 @@ namespace MiNET
 			{
 				_server.SendPackage(_endpoint, messages, _mtuSize, ref _datagramSequenceNumber, ref _reliableMessageNumber);
 			}
-		}
-
-		private void AddEntity(Player player)
-		{
-			int entityId = _entities.IndexOf(player);
-			if (entityId != -1)
-			{
-				// Allready exist				
-				if (entityId != 0 && player == this)
-				{
-					// If this is the actual player, it should always be a 0
-					_entities.Remove(player);
-					_entities.Insert(0, player);
-				}
-			}
-			else
-			{
-				_entities.Add(player);
-			}
-		}
-
-		public int GetEntityId(Player player)
-		{
-			int entityId = _entities.IndexOf(player);
-			if (entityId == -1)
-			{
-				AddEntity(player);
-				entityId = _entities.IndexOf(player);
-			}
-
-			return entityId;
 		}
 	}
 }
