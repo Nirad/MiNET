@@ -991,6 +991,48 @@ namespace MiNET.Net
 
 	}
 
+    public partial class McpeAddMobileEntity : Package
+    {
+        public int entityId;
+        public int type;
+        public int x;
+        public int y;
+        public int z;
+        public byte yaw;
+        public byte pitch;
+
+        public McpeAddMobileEntity()
+        {
+            Id = 0x88;
+        }
+        //TODO : Remove Hard coded data
+        protected override void EncodePackage()
+        {
+            base.EncodePackage();
+
+            BeforeEncode();
+
+            Write(entityId);
+            Write(type);
+            Write(x);
+            Write(y);
+            Write(z);
+            Write(yaw);
+            Write(pitch);
+            //NOTE : Write((byte)((Type << 5) | (Index & 0x1F)));
+            Write((byte)((0 << 5) | (0 & 0x1F)));
+            Write((byte)0);
+            Write((byte)((3 << 5) | (6 & 0x1F)));
+            Write((float)0);
+            Write((byte)0x7F);
+
+            AfterEncode();
+        }
+
+        partial void BeforeEncode();
+        partial void AfterEncode();
+    }
+
 	public partial class McpeFullChunkData : Package
 	{
 		public byte[] chunkData; // = null;
@@ -1375,6 +1417,41 @@ namespace MiNET.Net
 
 	}
 
+    public partial class McpeMoveEntity : Package
+    {
+        public int entityId;
+        public float x;
+        public float y;
+        public float z;
+        public float yaw;
+        public float pitch;
+
+        public McpeMoveEntity()
+        {
+            Id = 149;
+        }
+
+        protected override void EncodePackage()
+        {
+            base.EncodePackage();
+
+            BeforeEncode();
+
+            Write(entityId);
+            Write(x);
+            Write(y);
+            Write(z);
+            Write(yaw);
+            Write(pitch);
+
+            AfterEncode();
+        }
+
+        partial void BeforeEncode();
+        partial void AfterEncode();
+
+    }
+    
 	public partial class McpePlaceBlock : Package
 	{
 		public int entityId; // = null;

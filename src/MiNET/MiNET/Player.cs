@@ -230,7 +230,49 @@ namespace MiNET
 		private void HandleMessage(McpeMessage msg)
 		{
 			string text = msg.message;
-			_level.BroadcastTextMessage(text);
+            //TODO : Remove this and handel comand proprely
+            //Comand .spawntest
+            if (text == ".spawntest")
+            {
+                //For test only loop for each Type of mob
+                for (int i = 10; i < 17; i++)
+                {
+                    var pak = new McpeAddMobileEntity();
+                    pak.entityId = i;
+                    pak.type = i;
+                    pak.x = (int)KnownPosition.X + i -10;
+                    pak.y = (int)KnownPosition.Y;
+                    pak.z = (int)KnownPosition.Z;
+                    pak.yaw = 0;
+                    pak.pitch = 0;
+                    SendPackage((Package)pak);
+                }
+                for (int i = 32; i < 40; i++)
+                {
+                    var pak = new McpeAddMobileEntity();
+                    pak.entityId = i;
+                    pak.type = i;
+                    pak.x = (int)KnownPosition.X + i -26;
+                    pak.y = (int)KnownPosition.Y;
+                    pak.z = (int)KnownPosition.Z;
+                    pak.yaw = 0;
+                    pak.pitch = 0;
+                    SendPackage((Package)pak);
+                }
+            }
+            else if (text == ".movetest")
+            {
+                    var pak = new McpeMoveEntity();
+                    pak.entityId = 13;
+                    pak.x = KnownPosition.X +1;
+                    pak.y = KnownPosition.Y;
+                    pak.z = KnownPosition.Z +1;
+                    pak.yaw = 0;
+                    pak.pitch = 0;
+                    SendPackage((Package)pak);
+            }
+            else
+                _level.BroadcastTextMessage(text);
 		}
 
 		private void HandleMovePlayer(McpeMovePlayer msg)
