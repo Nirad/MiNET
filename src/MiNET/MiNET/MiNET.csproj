@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -20,7 +20,6 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -42,21 +41,28 @@
   <ItemGroup>
     <Compile Include="Blocks\Block.cs" />
     <Compile Include="Blocks\BlockAir.cs" />
+    <Compile Include="Blocks\BlockBedrock.cs" />
+    <Compile Include="Blocks\BlockChest.cs" />
     <Compile Include="Blocks\BlockFactory.cs" />
     <Compile Include="Blocks\BlockWoodenDoor.cs" />
+    <Compile Include="Explosion.cs" />
     <Compile Include="HealthManager.cs" />
+    <Compile Include="InventoryManger.cs" />
     <Compile Include="Items\Item.cs" />
     <Compile Include="Items\ItemBlock.cs" />
     <Compile Include="Items\ItemDoor.cs" />
     <Compile Include="Items\ItemFactory.cs" />
+    <Compile Include="Items\ItemFlintAndSteel.cs" />
     <Compile Include="Net\Ack.cs" />
     <Compile Include="Net\ConnectedPackage.cs" />
     <Compile Include="Net\ConnectionRequestAcceptedManual.cs" />
     <Compile Include="Net\Datagram.cs" />
     <Compile Include="Net\DatagramHeader.cs" />
+    <Compile Include="Net\McpeMovePlayer.cs" />
     <Compile Include="Net\MessagePart.cs" />
     <Compile Include="Net\MessagePartHeader.cs" />
     <Compile Include="Net\Nak.cs" />
+    <Compile Include="Net\ObjectPool.cs" />
     <Compile Include="Net\OpenConnectionRequest1.cs" />
     <Compile Include="Net\Package.cs" />
     <Compile Include="Net\MCPE Protocol.cs">
@@ -70,18 +76,25 @@
     <Compile Include="MiNetServer.cs" />
     <Compile Include="Player.cs" />
     <Compile Include="PlayerPosition3D.cs" />
-    <Compile Include="Utils\Class1.cs" />
+    <Compile Include="Utils\Endian.cs" />
     <Compile Include="Utils\CryptoRandom.cs" />
     <Compile Include="Utils\Int24.cs" />
+    <Compile Include="Utils\ItemStack.cs" />
+    <Compile Include="Utils\MetadataByte.cs" />
+    <Compile Include="Utils\MetadataDictionary.cs" />
+    <Compile Include="Utils\MetadataEntry.cs" />
+    <Compile Include="Utils\MetadataFloat.cs" />
     <Compile Include="Utils\MetadataInt.cs" />
     <Compile Include="Utils\MetadataInts.cs" />
-    <Compile Include="Utils\MetadataShorts.cs" />
+    <Compile Include="Utils\MetadataShort.cs" />
+    <Compile Include="Utils\MetadataSlot.cs" />
+    <Compile Include="Utils\MetadataString.cs" />
     <Compile Include="Utils\NbtBinaryReader.cs" />
     <Compile Include="Utils\NbtBinaryWriter.cs" />
     <Compile Include="Utils\NbtFormatException.cs" />
     <Compile Include="Worlds\ChunkColumn.cs" />
     <Compile Include="Worlds\CraftNetAnvilWorldProvider.cs" />
-    <Compile Include="Worlds\CraftNetWorldProvider.cs" />
+    <Compile Include="Worlds\EntityManager.cs" />
     <Compile Include="Worlds\FlatlandWorldProvider.cs" />
     <Compile Include="Worlds\IWorldProvider.cs" />
     <Compile Include="Worlds\Level.cs" />
@@ -89,6 +102,8 @@
       <SubType>Designer</SubType>
     </Content>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Utils\ConfigParser.cs" />
+    <Compile Include="Items\ItemBucket.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Net\MCPE Protocol Documentation.md">
@@ -131,6 +146,9 @@
       <Project>{B415FC03-C6FB-4B20-A5A1-81F526ADFEF5}</Project>
       <Name>Craft.Net.TerrainGeneration</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Inventory\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

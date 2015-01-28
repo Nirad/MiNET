@@ -4,10 +4,15 @@ using System.Diagnostics;
 using System.Net;
 using System.Threading;
 using Craft.Net.Common;
-using Craft.Net.Logic.Windows;
 using MiNET.Net;
 using MiNET.Utils;
 using MiNET.Worlds;
+using ItemStack = MiNET.Utils.ItemStack;
+using MetadataByte = MiNET.Utils.MetadataByte;
+using MetadataDictionary = MiNET.Utils.MetadataDictionary;
+using MetadataInt = MiNET.Utils.MetadataInt;
+using MetadataShort = MiNET.Utils.MetadataShort;
+using MetadataSlot = MiNET.Utils.MetadataSlot;
 
 namespace MiNET
 {
@@ -27,7 +32,6 @@ namespace MiNET
 		private readonly IPEndPoint _endpoint;
 		private Dictionary<Tuple<int, int>, ChunkColumn> _chunksUsed;
 		private short _mtuSize;
-		private List<Player> _entities;
 		private int _reliableMessageNumber;
 		private int _datagramSequenceNumber;
 		private object _sequenceNumberSync = new object();
@@ -46,12 +50,17 @@ namespace MiNET
 		public MetadataSlot ItemInHand { get; private set; }
 		public Level Level { get; private set; }
 
+		public bool IsBot { get; set; }
+
 		public DateTime LastUpdatedTime { get; private set; }
 		public PlayerPosition3D KnownPosition { get; private set; }
 		public bool IsSpawned { get; private set; }
 		public string Username { get; private set; }
+		public int EntityId { get; set; }
 
-		public InventoryWindow Inventory { get; set; }
+		internal Player()
+		{
+		}
 
 		public Player(MiNetServer server, IPEndPoint endpoint, Level level, short mtuSize)
 		{
@@ -61,9 +70,7 @@ namespace MiNET
 			_mtuSize = mtuSize;
 			HealthManager = new HealthManager(this);
 			_chunksUsed = new Dictionary<Tuple<int, int>, ChunkColumn>();
-			_entities = new List<Player>();
-			Inventory = new InventoryWindow();
-			AddEntity(this); // Make sure we are entity with ID == 0;
+			EntityId = -1;
 			IsSpawned = false;
 			KnownPosition = new PlayerPosition3D
 			{
@@ -86,9 +93,8 @@ namespace MiNET
 			{
 				Items[i] = new MetadataSlot(new ItemStack(i, 1));
 			}
-			//Items[0] = new MetadataSlot(new ItemStack(41, 1));
 			Items[0] = new MetadataSlot(new ItemStack(267, 1));
-			Items[1] = new MetadataSlot(new ItemStack(42, 1));
+			Items[1] = new MetadataSlot(new ItemStack(54, 1));
 			Items[2] = new MetadataSlot(new ItemStack(57, 1));
 			Items[3] = new MetadataSlot(new ItemStack(305, 3));
 
@@ -128,7 +134,8 @@ namespace MiNET
 
 			else if (typeof (McpeUpdateBlock) == message.GetType())
 			{
-				// Don't use
+				// DO NOT USE. Will dissapear from MCPE any release. 
+				// It is a bug that it leaks these messages.
 			}
 
 			else if (typeof (McpeRemoveBlock) == message.GetType())
@@ -238,6 +245,8 @@ namespace MiNET
 
 			// Broadcast spawn to all
 			Level.AddPlayer(this);
+
+			BroadcastSetEntityData();
 		}
 
 		private void HandleDisconnectionNotification()
@@ -266,8 +275,15 @@ namespace MiNET
 		private void HandleLogin(McpeLogin msg)
 		{
 			Username = msg.username;
+
 			if (Username == null) throw new Exception("No username on login");
 
+			// Check if the user already exist, that case bumpt the old one
+			Level.RemoveDuplicatePlayers(Username);
+
+			if (Username.StartsWith("Player")) IsBot = true;
+
+			if (Username == null) throw new Exception("No username on login");
 			SendPackage(new McpeLoginStatus {status = 0});
 
 			// Start game
@@ -283,15 +299,18 @@ namespace MiNET
 		private void HandleMessage(McpeMessage msg)
 		{
 			string text = msg.message;
-			Level.BroadcastTextMessage(text);
+			Level.BroadcastTextMessage(text, this);
 		}
 
 		private void HandleMovePlayer(McpeMovePlayer msg)
 		{
+			if (HealthManager.IsDead) return;
+
 			KnownPosition = new PlayerPosition3D(msg.x, msg.y, msg.z) {Pitch = msg.pitch, Yaw = msg.yaw, BodyYaw = msg.bodyYaw};
 			LastUpdatedTime = DateTime.UtcNow;
 
-			//if (Username.StartsWith("Player")) return;
+			if (IsBot) return;
+
 			SendChunksForKnownPosition();
 		}
 
@@ -302,11 +321,15 @@ namespace MiNET
 
 		private void HandlePlayerArmorEquipment(McpePlayerArmorEquipment msg)
 		{
+			if (HealthManager.IsDead) return;
+
 			Level.RelayBroadcast(this, msg);
 		}
 
 		private void HandlePlayerEquipment(McpePlayerEquipment msg)
 		{
+			if (HealthManager.IsDead) return;
+
 			ItemInHand.Value.Id = msg.item;
 			ItemInHand.Value.Metadata = msg.meta;
 
@@ -315,6 +338,8 @@ namespace MiNET
 
 		private void HandleContainerSetSlot(McpeContainerSetSlot msg)
 		{
+			if (HealthManager.IsDead) return;
+
 			switch (msg.windowId)
 			{
 				case 0:
@@ -344,7 +369,7 @@ namespace MiNET
 
 		private void HandleInteract(McpeInteract msg)
 		{
-			Player target = _entities[msg.targetEntityId];
+			Player target = Level.EntityManager.GetPlayer(msg.targetEntityId);
 
 			if (target == null) return;
 
@@ -405,7 +430,7 @@ namespace MiNET
 				seed = 1406827239,
 				generator = 1,
 				gamemode = (int) Level.GameMode,
-				entityId = GetEntityId(this),
+				entityId = 0,
 				spawnX = (int) KnownPosition.X,
 				spawnY = (int) KnownPosition.Y,
 				spawnZ = (int) KnownPosition.Z,
@@ -440,14 +465,17 @@ namespace MiNET
 				int count = 0;
 				foreach (var chunk in Level.GenerateChunks((int) KnownPosition.X, (int) KnownPosition.Z, force ? new Dictionary<Tuple<int, int>, ChunkColumn>() : _chunksUsed))
 				{
-					SendPackage(new McpeFullChunkData {chunkData = chunk.GetBytes()});
+					if (true)
+					{
+						McpeFullChunkData fullChunkData = McpeFullChunkData.CreateObject();
+						fullChunkData.chunkData = chunk.GetBytes();
+
+						SendPackage(fullChunkData);
+					}
 
 					if (count == 56 && !IsSpawned)
 					{
 						InitializePlayer();
-
-						IsSpawned = true;
-						Level.AddPlayer(this);
 					}
 
 					count++;
@@ -463,22 +491,25 @@ namespace MiNET
 		public void SendSetTime()
 		{
 			// started == true ? 0x80 : 0x00);
-			SendPackage(new McpeSetTime {time = Level.CurrentWorldTime, started = (byte) (Level.WorldTimeStarted ? 0x80 : 0x00)});
+			McpeSetTime message = McpeSetTime.CreateObject();
+			message.time = Level.CurrentWorldTime;
+			message.started = (byte) (Level.WorldTimeStarted ? 0x80 : 0x00);
+			SendPackage(message);
 		}
 
 		public void SendMovePlayer()
 		{
-			SendPackage(new McpeMovePlayer
-			{
-				entityId = GetEntityId(this),
-				x = KnownPosition.X,
-				y = KnownPosition.Y,
-				z = KnownPosition.Z,
-				yaw = KnownPosition.Yaw,
-				pitch = KnownPosition.Pitch,
-				bodyYaw = KnownPosition.BodyYaw,
-				teleport = 0x80
-			});
+			var package = McpeMovePlayer.CreateObject();
+			package.entityId = 0;
+			package.x = KnownPosition.X;
+			package.y = KnownPosition.Y;
+			package.z = KnownPosition.Z;
+			package.yaw = KnownPosition.Yaw;
+			package.pitch = KnownPosition.Pitch;
+			package.bodyYaw = KnownPosition.BodyYaw;
+			package.teleport = 0x80;
+
+			SendPackage(package);
 		}
 
 
@@ -505,7 +536,13 @@ namespace MiNET
 				slotData = Armor,
 				hotbarData = null
 			});
+
 			_playerTimer = new Timer(OnPlayerTick, null, 50, 50);
+
+			IsSpawned = true;
+			Level.AddPlayer(this);
+
+			BroadcastSetEntityData();
 		}
 
 		private void OnPlayerTick(object state)
@@ -516,10 +553,6 @@ namespace MiNET
 		public void SendAddForPlayer(Player player)
 		{
 			if (player == this) return;
-
-			if (player.Username == null) throw new Exception("No username");
-
-			if (EntityExists(player)) return;
 
 			SendPackage(new McpeAddPlayer
 			{
@@ -555,14 +588,14 @@ namespace MiNET
 			SendPackage(new McpePlayerArmorEquipment()
 			{
 				entityId = GetEntityId(player),
-				helmet = (byte) (((MetadataSlot) Armor[0]).Value.Id - 256),
-				chestplate = (byte) (((MetadataSlot) Armor[1]).Value.Id - 256),
-				leggings = (byte) (((MetadataSlot) Armor[2]).Value.Id - 256),
-				boots = (byte) (((MetadataSlot) Armor[3]).Value.Id - 256)
+				helmet = (byte) (((MetadataSlot) player.Armor[0]).Value.Id - 256),
+				chestplate = (byte) (((MetadataSlot) player.Armor[1]).Value.Id - 256),
+				leggings = (byte) (((MetadataSlot) player.Armor[2]).Value.Id - 256),
+				boots = (byte) (((MetadataSlot) player.Armor[3]).Value.Id - 256)
 			});
 		}
 
-		public void SendRemovePlayer(Player player)
+		public void SendRemoveForPlayer(Player player)
 		{
 			if (player == this) return;
 
@@ -571,38 +604,40 @@ namespace MiNET
 				clientId = 0,
 				entityId = GetEntityId(player)
 			});
-
-			RemoveEntity(player);
 		}
 
-		private ObjectPool<McpeMovePlayer> _movePool = new ObjectPool<McpeMovePlayer>(() => new McpeMovePlayer());
-
-		public void SendMovementForPlayer(Player[] players)
+		public void BroadcastEntityEvent()
 		{
-			foreach (var player in players)
+			Level.RelayBroadcast(this, new McpeEntityEvent()
 			{
-				SendMovementForPlayer(player);
+				entityId = 0,
+				eventId = (byte) (HealthManager.Health <= 0 ? 3 : 2)
+			});
+
+			if (HealthManager.IsDead)
+			{
+				Level.BroadcastTextMessage("You died and lost all stuff, newbie!");
 			}
 		}
 
-		public void SendMovementForPlayer(Player player)
+		public void BroadcastSetEntityData()
 		{
+			MetadataDictionary metadata = new MetadataDictionary();
+			metadata[0] = new MetadataByte((byte) (HealthManager.IsOnFire ? 1 : 0));
+			metadata[1] = new MetadataShort(HealthManager.Air);
+			metadata[16] = new MetadataByte(0);
+
+			Level.RelayBroadcast(this, new McpeSetEntityData()
+			{
+				entityId = 0,
+				namedtag = metadata.GetBytes()
+			});
+		}
+
+		public void SendMovementForPlayer(Player player, McpeMovePlayer move)
+		{
+			if (HealthManager.IsDead) return;
 			if (player == this) return;
-
-			var knownPosition = player.KnownPosition;
-
-			var move = _movePool.GetObject();
-			move.Timer.Start();
-			move.MovePool = _movePool;
-			move.entityId = GetEntityId(player);
-			move.x = knownPosition.X;
-			move.y = knownPosition.Y;
-			move.z = knownPosition.Z;
-			move.yaw = knownPosition.Yaw;
-			move.pitch = knownPosition.Pitch;
-			move.bodyYaw = knownPosition.BodyYaw;
-			move.teleport = 0;
-			move.Encode(); // Optmized
 
 			SendPackage(move);
 		}
@@ -660,49 +695,9 @@ namespace MiNET
 			}
 		}
 
-		private void AddEntity(Player player)
-		{
-			lock (_entities)
-			{
-				if (_entities.Count == 0 && player != this)
-				{
-					_entities.Add(this);
-				}
-				_entities.Add(player);
-			}
-		}
-
-		private void RemoveEntity(Player player)
-		{
-			lock (_entities)
-			{
-				_entities.Remove(player);
-			}
-		}
-
-		private bool EntityExists(Player player)
-		{
-			lock (_entities)
-			{
-				return _entities.Contains(player);
-			}
-		}
-
 		public int GetEntityId(Player player)
 		{
-			lock (_entities)
-			{
-				int entityId = _entities.IndexOf(player);
-				if (entityId == -1)
-				{
-					AddEntity(player);
-					entityId = _entities.IndexOf(player);
-				}
-
-				if (entityId == 0 && player != this) throw new Exception("Entity ID == 0 is reserved for player.");
-
-				return entityId;
-			}
+			return Level.EntityManager.GetEntityId(this, player);
 		}
 
 		public void Kill()

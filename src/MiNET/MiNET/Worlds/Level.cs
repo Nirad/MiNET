@@ -9,6 +9,8 @@ using Craft.Net.TerrainGeneration;
 using MiNET.Blocks;
 using MiNET.Items;
 using MiNET.Net;
+using MiNET.Utils;
+using MetadataSlot = MiNET.Utils.MetadataSlot;
 
 namespace MiNET.Worlds
 {
@@ -47,6 +49,7 @@ namespace MiNET.Worlds
 		Hard
 	}
 
+
 	public class Level
 	{
 		public static readonly Coordinates3D Up = new Coordinates3D(0, 1, 0);
@@ -72,14 +75,26 @@ namespace MiNET.Worlds
 		public long StartTimeInTicks { get; private set; }
 		public bool WorldTimeStarted { get; private set; }
 
+		public EntityManager EntityManager { get; private set; }
+
 		public Level(string levelId, IWorldProvider worldProvider = null)
 		{
+			EntityManager = new EntityManager();
 			SpawnPoint = new Coordinates3D(50, 10, 50);
 			Players = new List<Player>();
 			LevelId = levelId;
-			GameMode = GameMode.Survival;
-			Difficulty = Difficulty.Peaceful;
-			_worldProvider = worldProvider;
+			GameMode = ConfigParser.GetProperty("DefaultGamemode", GameMode.Creative);
+			Difficulty = ConfigParser.GetProperty("Difficulty", Difficulty.Peaceful);
+			if (ConfigParser.GetProperty("UsePCWorld", false))
+			{
+				_worldProvider = new CraftNetAnvilWorldProvider();
+			}
+			else
+			{
+				_worldProvider = worldProvider;
+			}
+
+			//McpeMovePlayer._pool.FillPool(100);
 		}
 
 		public void Initialize()
@@ -87,7 +102,7 @@ namespace MiNET.Worlds
 			CurrentWorldTime = 6000;
 			WorldTimeStarted = true;
 
-			var loadIt = new FlatlandGenerator();
+			var loadIt = new FlatlandGenerator(); // Don't remove
 
 			if (_worldProvider == null) _worldProvider = new FlatlandWorldProvider();
 			//if (_worldProvider == null) _worldProvider = new CraftNetAnvilWorldProvider();
@@ -116,23 +131,26 @@ namespace MiNET.Worlds
 		{
 			lock (Players)
 			{
+				EntityManager.AddEntity(null, newPlayer);
+
 				Player[] targetPlayers = GetSpawnedPlayers();
 
 				foreach (var targetPlayer in targetPlayers)
 				{
 					targetPlayer.SendAddForPlayer(newPlayer);
-				}
-
-				foreach (var targetPlayer in targetPlayers)
-				{
-					// Add all existing users to new newPlayer
 					newPlayer.SendAddForPlayer(targetPlayer);
 				}
 
-				BroadcastTextMessage(string.Format("Player {0} joined the game!", newPlayer.Username), true);
+				BroadcastTextMessage(string.Format("Player {0} joined the game!", newPlayer.Username));
 
 				if (!Players.Contains(newPlayer))
+				{
 					Players.Add(newPlayer);
+				}
+				else
+				{
+					throw new Exception("Player existed in the players list when it should not");
+				}
 			}
 		}
 
@@ -140,23 +158,39 @@ namespace MiNET.Worlds
 		{
 			lock (Players)
 			{
-				Players.Remove(player);
+				if (!Players.Remove(player)) throw new Exception("Expected player to exist on remove.");
+
 				foreach (var targetPlayer in GetSpawnedPlayers())
 				{
-					if (targetPlayer.IsSpawned)
-						targetPlayer.SendRemovePlayer(player);
+					targetPlayer.SendRemoveForPlayer(player);
+					player.SendRemoveForPlayer(targetPlayer);
 				}
 
-				BroadcastTextMessage(string.Format("Player {0} left the game!", player.Username), true);
+				BroadcastTextMessage(string.Format("Player {0} left the game!", player.Username));
+
+				EntityManager.RemoveEntity(null, player);
 			}
 		}
 
-		public void BroadcastTextMessage(string text, bool isSystemMessage = false)
+		public void RemoveDuplicatePlayers(string username)
+		{
+			lock (Players)
+			{
+				var existingPlayers = Players.Where(player => player.Username == username);
+				foreach (var existingPlayer in existingPlayers)
+				{
+					Debug.WriteLine(string.Format("Removing staled players on login {0}", username));
+					RemovePlayer(existingPlayer);
+				}
+			}
+		}
+
+		public void BroadcastTextMessage(string text, Player sender = null)
 		{
 			var response = new McpeMessage
 			{
 				source = "",
-				message = (isSystemMessage ? "MiNET says - " : "") + text
+				message = (sender == null ? "MiNET says - " : "<" + sender.Username + "> ") + text
 			};
 
 			foreach (var player in GetSpawnedPlayers())
@@ -188,16 +222,16 @@ namespace MiNET.Worlds
 
 					Player[] players = GetSpawnedPlayers();
 
-					if (CurrentWorldTime%10 == 0)
-					{
-						foreach (var newPlayer in Players.ToArray())
-						{
-							if (newPlayer.IsSpawned)
-							{
-								newPlayer.SendSetTime();
-							}
-						}
-					}
+					//if (CurrentWorldTime%10 == 0)
+					//{
+					//	foreach (var newPlayer in players)
+					//	{
+					//		if (newPlayer.IsSpawned)
+					//		{
+					//			newPlayer.SendSetTime();
+					//		}
+					//	}
+					//}
 
 					// broadcast events to all players
 
@@ -235,15 +269,87 @@ namespace MiNET.Worlds
 		private void BroadCastMovement(Player[] players, Player[] updatedPlayers)
 		{
 			List<Task> tasks = new List<Task>();
-			foreach (var targetPlayer in players)
+
+			foreach (var player in updatedPlayers)
 			{
-				var task = new Task(() => targetPlayer.SendMovementForPlayer(updatedPlayers));
+
+				Player updatedPlayer = player;
+				var knownPosition = updatedPlayer.KnownPosition;
+
+				int entityId = EntityManager.GetEntityId(null, player);
+				if (entityId == 0) throw new Exception("Souldn't have 0 entity IDs here.");
+
+				var task = new Task(delegate
+				{
+					McpeMovePlayer move = McpeMovePlayer.CreateObject();
+					move.entityId = entityId;
+					move.x = knownPosition.X;
+					move.y = knownPosition.Y;
+					move.z = knownPosition.Z;
+					move.yaw = knownPosition.Yaw;
+					move.pitch = knownPosition.Pitch;
+					move.bodyYaw = knownPosition.BodyYaw;
+					move.teleport = 0;
+					var bytes = move.Encode(); // Optmized
+
+					foreach (var p in players)
+					{
+						if (p == updatedPlayer) continue;
+
+						move.ReferenceCounter = move.ReferenceCounter + 1;
+						p.SendMovementForPlayer(updatedPlayer, move);
+					}
+					move.PutPool();
+				});
 				tasks.Add(task);
 				task.Start();
 			}
 
 			Task.WaitAll(tasks.ToArray());
 		}
+
+		private void BroadCastMovementOld(Player[] players, Player[] updatedPlayers)
+		{
+			List<Task> tasks = new List<Task>();
+
+			foreach (var player in updatedPlayers)
+			{
+				var knownPosition = player.KnownPosition;
+
+				int entityId = EntityManager.GetEntityId(null, player);
+				if (entityId == 0) throw new Exception("Souldn't have 0 entity IDs here.");
+
+				McpeMovePlayer move = McpeMovePlayer.CreateObject();
+				move.entityId = entityId;
+				move.x = knownPosition.X;
+				move.y = knownPosition.Y;
+				move.z = knownPosition.Z;
+				move.yaw = knownPosition.Yaw;
+				move.pitch = knownPosition.Pitch;
+				move.bodyYaw = knownPosition.BodyYaw;
+				move.teleport = 0;
+				var bytes = move.Encode(); // Optmized
+
+				Player updatedPlayer = player;
+				var task = new Task(delegate
+				{
+					foreach (var p in players)
+					{
+						McpeMovePlayer m = McpeMovePlayer.CreateObject();
+						m.SetEncodedMessage(bytes);
+						p.SendMovementForPlayer(updatedPlayer, m);
+					}
+
+					move.PutPool();
+				});
+
+				tasks.Add(task);
+				task.Start();
+			}
+
+			Task.WaitAll(tasks.ToArray());
+		}
+
 
 		public IEnumerable<ChunkColumn> GenerateChunks(int playerX, int playerZ, Dictionary<Tuple<int, int>, ChunkColumn> chunksUsed)
 		{
@@ -324,6 +430,16 @@ namespace MiNET.Worlds
 			foreach (var player in GetSpawnedPlayers())
 			{
 				var send = message.Clone<McpeEntityEvent>();
+				send.entityId = player.GetEntityId(target);
+				player.SendPackage(send);
+			}
+		}
+
+		public void RelayBroadcast(Player target, McpeSetEntityData message)
+		{
+			foreach (var player in GetSpawnedPlayers())
+			{
+				var send = message.Clone<McpeSetEntityData>();
 				send.entityId = player.GetEntityId(target);
 				player.SendPackage(send);
 			}

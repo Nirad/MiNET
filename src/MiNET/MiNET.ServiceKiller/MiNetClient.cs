@@ -106,6 +106,8 @@ namespace MiNET.ServiceKiller
 				SendData(data);
 			}
 
+			message.PutPool();
+
 			return count;
 		}
 
@@ -216,6 +218,7 @@ namespace MiNET.ServiceKiller
 
 		public void SendMcpeMovePlayer(int x, int y, int z)
 		{
+			//var movePlayerPacket = McpeMovePlayer.CreateObject();
 			_movePlayerPacket.Reset();
 			_movePlayerPacket.x = x;
 			_movePlayerPacket.y = y;
@@ -223,6 +226,7 @@ namespace MiNET.ServiceKiller
 			_movePlayerPacket.yaw = 91;
 			_movePlayerPacket.pitch = 28;
 			_movePlayerPacket.bodyYaw = 91;
+
 			SendPackage(_movePlayerPacket, _mtuSize, 0, 0);
 		}
 	}

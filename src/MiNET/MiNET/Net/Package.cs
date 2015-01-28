@@ -1,43 +1,23 @@
 using System;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Craft.Net.Common;
 using MiNET.Utils;
 
 namespace MiNET.Net
 {
-	public class ObjectPool<T>
-	{
-		private ConcurrentBag<T> _objects;
-		private Func<T> _objectGenerator;
-
-		public ObjectPool(Func<T> objectGenerator)
-		{
-			if (objectGenerator == null) throw new ArgumentNullException("objectGenerator");
-			_objects = new ConcurrentBag<T>();
-			_objectGenerator = objectGenerator;
-		}
-
-		public T GetObject()
-		{
-			T item;
-			if (_objects.TryTake(out item)) return item;
-			return _objectGenerator();
-		}
-
-		public void PutObject(T item)
-		{
-			_objects.Add(item);
-		}
-	}
-
 	/// Base package class
-	public partial class Package : ICloneable
+	public abstract partial class Package : ICloneable
 	{
-		public ObjectPool<McpeMovePlayer> MovePool = null;
+		public virtual void PutPool()
+		{
+			//Console.WriteLine("Put pool for object wrong: " + this.GetType().Name);
+		}
+
+		protected object _bufferSync = new object();
+		private bool _isEncoded = false;
+		private byte[] _encodedMessage;
 
 		public byte Id;
 
@@ -192,6 +172,26 @@ namespace MiNET.Net
 			return Encoding.UTF8.GetString(ReadBytes(len));
 		}
 
+		public void Write(MetadataInts metadata)
+		{
+			if (metadata == null)
+			{
+				Write((short) 0);
+				return;
+			}
+
+			Write((short) metadata.Count);
+
+			for (byte i = 0; i < metadata.Count; i++)
+			{
+				MetadataInt slot = metadata[i] as MetadataInt;
+				if (slot != null)
+				{
+					Write(slot.Value);
+				}
+			}
+		}
+
 		public MetadataInts ReadMetadataInts()
 		{
 			MetadataInts metadata = new MetadataInts();
@@ -205,21 +205,7 @@ namespace MiNET.Net
 			return metadata;
 		}
 
-		public MetadataSlots ReadMetadataSlots()
-		{
-			short count = ReadShort();
-
-			MetadataSlots metadata = new MetadataSlots();
-
-			for (byte i = 0; i < count; i++)
-			{
-				MetadataSlot slot = new MetadataSlot(new ItemStack(ReadShort(), ReadSByte(), ReadShort()));
-			}
-
-			return metadata;
-		}
-
-		public void Write(MetadataDictionary metadata)
+		public void Write(MetadataSlots metadata)
 		{
 			if (metadata == null)
 			{
@@ -231,40 +217,35 @@ namespace MiNET.Net
 
 			for (byte i = 0; i < metadata.Count; i++)
 			{
+				MetadataSlot slot = metadata[i] as MetadataSlot;
+				if (slot != null)
 				{
-					MetadataSlot slot = metadata[i] as MetadataSlot;
-					if (slot != null)
-					{
-						Write(slot.Value.Id);
-						Write(slot.Value.Count);
-						Write(slot.Value.Metadata);
-
-						continue;
-					}
-				}
-
-				{
-					MetadataInt slot = metadata[i] as MetadataInt;
-					if (slot != null)
-					{
-						Write(slot.Value);
-						continue;
-					}
+					Write(slot.Value.Id);
+					Write(slot.Value.Count);
+					Write(slot.Value.Metadata);
 				}
 			}
 		}
 
+		public MetadataSlots ReadMetadataSlots()
+		{
+			short count = ReadShort();
+
+			MetadataSlots metadata = new MetadataSlots();
+
+			for (byte i = 0; i < count; i++)
+			{
+				metadata[i] = new MetadataSlot(new ItemStack(ReadShort(), ReadSByte(), ReadShort()));
+			}
+
+			return metadata;
+		}
 
 		protected virtual void EncodePackage()
 		{
 			_buffer.Position = 0;
 			Write(Id);
 		}
-
-		private object _bufferSync = new object();
-
-		private bool _isEncoded = false;
-		private byte[] _encodedMessage;
 
 		public void Reset()
 		{
@@ -274,6 +255,12 @@ namespace MiNET.Net
 			_buffer.Position = 0;
 			_timer.Reset();
 			_isEncoded = false;
+		}
+
+		public void SetEncodedMessage(byte[] encodedMessage)
+		{
+			_encodedMessage = encodedMessage;
+			_isEncoded = true;
 		}
 
 		public virtual byte[] Encode()
@@ -322,5 +309,6 @@ namespace MiNET.Net
 		{
 			return (T) Clone();
 		}
+
 	}
 }

@@ -14,6 +14,8 @@ doc.Load(path + @"\MCPE Protocol.xml");
 // WARNING: T4 GENERATED CODE - DO NOT EDIT
 // 
 
+using System;
+using System.Threading;
 using MiNET.Utils; 
 using little = MiNET.Utils.Int24; // friendly name
 
@@ -33,7 +35,8 @@ foreach (XmlNode pdu in doc.SelectNodes("//pdu"))
 {
 #>
 				case <#= pdu.Attributes["id"].Value #>:
-					package = new <#= CodeTypeName(pdu.Attributes["name"].Value) #>();
+					package = <#= CodeTypeName(pdu.Attributes["name"].Value) #>.CreateObject();
+					//package.Timer.Start();
 					package.Decode(buffer);
 					return package;
 <#	
@@ -83,9 +86,10 @@ foreach (XmlNode pdu in doc.SelectNodes("//pdu"))
 
 #>
 
-		public <#= CodeTypeName(pdu.Attributes["name"].Value) #>()
+		public <#= CodeTypeName(pdu.Attributes["name"].Value) #>(bool pooled = false)
 		{
 			Id = <#= CodeName(pdu.Attributes["id"].Value, true) #>;
+			_isPooled = pooled;
 		}
 
 		protected override void EncodePackage()
@@ -142,6 +146,37 @@ foreach (XmlNode pdu in doc.SelectNodes("//pdu"))
 
 		partial void BeforeDecode();
 		partial void AfterDecode();
+
+		private static readonly ObjectPool<<#= CodeTypeName(pdu.Attributes["name"].Value) #>> _pool = 
+			new ObjectPool<<#= CodeTypeName(pdu.Attributes["name"].Value) #>>(() => new <#= CodeTypeName(pdu.Attributes["name"].Value) #>(true));
+
+		private bool _isPooled = false;
+		public int ReferenceCounter = 0;
+
+		public static <#= CodeTypeName(pdu.Attributes["name"].Value) #> CreateObject()
+		{
+			var obj = _pool.GetObject();
+			obj.ReferenceCounter = 1;
+			return obj;
+		}
+
+		public override void PutPool()
+		{
+			if(!_isPooled) return;
+
+			if (Interlocked.Decrement(ref ReferenceCounter) > 0) return;
+
+			Reset();
+			_pool.PutObject(this);
+		}
+
+		static <#= CodeTypeName(pdu.Attributes["name"].Value) #>()
+		{
+			for (int i = 0; i < 1000; i++)
+			{
+				_pool.PutObject(_pool.GetObject());
+			}
+		}
 
 	}
 

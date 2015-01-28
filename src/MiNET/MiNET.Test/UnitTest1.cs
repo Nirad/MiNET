@@ -6,17 +6,45 @@ using System.IO.Compression;
 using System.Net;
 using System.Runtime.Remoting.Metadata.W3cXsd2001;
 using System.Text;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MiNET.Net;
 using MiNET.Utils;
 using MiNET.Worlds;
+using NUnit.Framework;
 
 namespace MiNET
 {
-	[TestClass]
+	[TestFixture]
 	public class MinetServerTest
 	{
-		[TestMethod]
+		[Test]
+		public void NetworkToAsciiTest()
+		{
+			IPAddress ip;
+
+			var systemAddress = new byte[] {0x00, 0x00, 0xf5, 0xff};
+			ip = new IPAddress(systemAddress);
+			Console.WriteLine("ip is " + ByteArrayToString(ip.GetAddressBytes()));
+			Console.WriteLine("ip is " + ip.ToString());
+			Console.WriteLine("port is " + BitConverter.ToUInt16(new byte[] {0xff, 0xf5,}, 0));
+			Console.WriteLine("");
+
+			var ipEndpoint = new IPEndPoint(IPAddress.Loopback, 19132);
+
+			Console.WriteLine("ip is " + ByteArrayToString(ipEndpoint.Address.GetAddressBytes()));
+
+			//long netorder_ip = IPAddress.HostToNetworkOrder(hostorder_ip);
+
+			byte[] unknown1 = {0xf5, 0xff, 0xff, 0xf5};
+			long netorder_ip = BitConverter.ToInt32(unknown1, 0);
+			ip = new IPAddress(unknown1);
+			Console.WriteLine("ip is " + ByteArrayToString(ip.GetAddressBytes()));
+
+			byte[] unknown2 = {0xff, 0xff, 0xff, 0xff};
+			ip = new IPAddress(unknown2);
+			Console.WriteLine("ip is " + ip.ToString());
+		}
+
+		[Test]
 		public void PerformanceTest()
 		{
 			var messages = new List<Package>();
@@ -77,10 +105,9 @@ namespace MiNET
 			//Console.WriteLine("Size: {0}", datagrams.First().Encode().Length);
 			//Console.WriteLine("Count: {0}", datagrams.Count);
 			Console.WriteLine("Time: {0}", stopwatch.ElapsedMilliseconds);
-
 		}
 
-		[TestMethod, Ignore]
+		[Test, Ignore]
 		public void EncapsulatedHeaderTest()
 		{
 			DatagramHeader header = new DatagramHeader(0x8c);
@@ -93,7 +120,7 @@ namespace MiNET
 			Assert.AreEqual(true, header.needsBAndAs);
 		}
 
-		[TestMethod, Ignore]
+		[Test, Ignore]
 		public void LabTest()
 		{
 			// x = 8, z = 9
@@ -172,34 +199,6 @@ namespace MiNET
 				hex.AppendFormat("0x{0:x2},", b);
 			hex.Append("}");
 			return hex.ToString();
-		}
-
-
-		public List<byte[]> CreatePacket(IPEndPoint senderEndpoint, Package message, int sequenceNumber, int reliableMessageNumber, Reliability reliability)
-		{
-			List<byte[]> val = new List<byte[]>();
-			byte[] encodedMessage = message.Encode();
-			int mtu = 1432;
-			int count = (int) Math.Ceiling(encodedMessage.Length/(double) mtu);
-			int index = 0;
-			foreach (var bytes in new MiNetServer().ArraySplit(encodedMessage, mtu))
-			{
-				ConnectedPackage package = new ConnectedPackage
-				{
-					Buffer = bytes,
-					_reliability = reliability,
-					_reliableMessageNumber = reliableMessageNumber++,
-					_datagramSequenceNumber = sequenceNumber++,
-					_hasSplit = true,
-					_splitPacketCount = count,
-					_splitPacketId = 0,
-					_splitPacketIndex = index++
-				};
-
-				byte[] data = package.Encode();
-				val.Add(data);
-			}
-			return val;
 		}
 	}
 }
